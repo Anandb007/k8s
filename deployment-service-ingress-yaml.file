@@ -1,0 +1,166 @@
+cat backend-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp-backend
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: myapp-backend
+  template:
+    metadata:
+      labels:
+        app: myapp-backend
+    spec:
+      tolerations:
+        - key: "app"
+          operator: "Equal"
+          value: "myapp"
+          effect: "NoSchedule"
+      containers:
+        - name: myapp-backend
+          image: 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:backend-latest
+          ports:
+            - containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /api/hello
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /api/hello
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 3
+      imagePullSecrets:
+        - name: ecr-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp-backend-service
+spec:
+  selector:
+    app: myapp-backend
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+
+root@master-node:/home/ubuntu/k8s-files#
+root@master-node:/home/ubuntu/k8s-files#
+root@master-node:/home/ubuntu/k8s-files# cat frontend-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp-frontend
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: myapp-frontend
+  template:
+    metadata:
+      labels:
+        app: myapp-frontend
+    spec:
+      tolerations:
+        - key: "app"
+          operator: "Equal"
+          value: "myapp"
+          effect: "NoSchedule"
+      containers:
+        - name: myapp-frontend
+          image: 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:frontend-latest
+          ports:
+            - containerPort: 80
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 3
+      imagePullSecrets:
+        - name: ecr-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp-frontend-service
+spec:
+  selector:
+    app: myapp-frontend
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+
+root@master-node:/home/ubuntu/k8s-files# cat myapp-ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: myapp-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: myapp-frontend-service
+                port:
+                  number: 80
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: myapp-backend-service
+                port:
+                  number: 8080
+
+root@master-node:/home/ubuntu/k8s-files# cat frontend-
+frontend-deployment.yaml  frontend-pdb.yaml
+root@master-node:/home/ubuntu/k8s-files# cat frontend-pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: myapp-frontend-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: myapp-frontend
+
+root@master-node:/home/ubuntu/k8s-files# cat backend-pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: myapp-backend-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: myapp-backend
