@@ -1,0 +1,125 @@
+# Kubernetes RBAC (Role-Based Access Control) Concept
+
+## Overview
+    RBAC (Role-Based Access Control) in Kubernetes is a method to **control who can do what** in the cluster. It is **authorization only**—it does not handle user creation or authentication.  
+    RBAC allows you to define permissions and assign them to users, groups, or service accounts.
+
+---
+
+## 1. Core Concepts
+
+    | Term | Description |
+    |------|-------------|
+    | **Role** | Defines permissions **within a namespace**. |
+    | **ClusterRole** | Defines permissions **cluster-wide** or across multiple namespaces. |
+    | **RoleBinding** | Assigns a Role to a user or group **within a namespace**. |
+    | **ClusterRoleBinding** | Assigns a ClusterRole to a user or group **cluster-wide**. |
+    | **User** | Identity of a person or entity accessing the cluster (managed externally, e.g., AWS IAM, OIDC). |
+    | **Service Account** | Identity for a pod to access the Kubernetes API. |
+    
+    > **Important:** Kubernetes does **not create users** itself. Users are managed externally and authenticated through IAM, OIDC, certificates, or tokens.
+
+---
+
+## 2. Creating a User (Identity)
+
+### 2.1 Cloud IAM Users (Recommended for EKS)
+    1. Create a user in AWS IAM.
+    2. Map the IAM user to Kubernetes in `aws-auth` ConfigMap:
+    ```yaml
+    mapUsers: |
+      - userarn: arn:aws:iam::123456789012:user/alice
+        username: alice
+        groups:
+          - developers
+    3. Grant RBAC permissions via Role or ClusterRole.
+
+2.2 Client Certificates
+    Generate a key + certificate for the user.
+    The CN (Common Name) of the certificate becomes the Kubernetes username.
+    RBAC is assigned to this CN.
+
+2.3 OpenID Connect (OIDC)
+    Users exist in an external identity provider (Keycloak, Okta, Azure AD).
+    Kubernetes validates JWT tokens.
+    Map OIDC claims (user/group) to RBAC roles.
+
+2.4 Static Token / Basic Auth
+    Define token or username/password in kube-apiserver (deprecated, mostly for testing).
+
+3. Creating Roles and ClusterRoles
+3.1 Role (Namespace-scoped)
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      namespace: dev
+      name: pod-reader
+    rules:
+    - apiGroups: [""]
+      resources: ["pods"]
+      verbs: ["get", "list"]
+
+3.2 ClusterRole (Cluster-wide)
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    metadata:
+      name: cluster-admin
+    rules:
+    - apiGroups: ["*"]
+      resources: ["*"]
+      verbs: ["*"]
+
+4. Binding Roles to Users
+4.1 RoleBinding
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: read-pods
+      namespace: dev
+    subjects:
+    - kind: User
+      name: alice       # Must match authenticated identity
+      apiGroup: rbac.authorization.k8s.io
+    roleRef:
+      kind: Role
+      name: pod-reader
+      apiGroup: rbac.authorization.k8s.io
+
+4.2 ClusterRoleBinding
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRoleBinding
+    metadata:
+      name: cluster-admin-binding
+    subjects:
+    - kind: User
+      name: alice
+      apiGroup: rbac.authorization.k8s.io
+    roleRef:
+      kind: ClusterRole
+      name: cluster-admin
+      apiGroup: rbac.authorization.k8s.io
+
+5. Accessing Kubernetes
+    Once a user exists and RBAC is assigned:
+    Configure kubeconfig (example for AWS IAM user):
+    aws eks --region <region> update-kubeconfig --name <cluster-name> --profile <user-profile>
+    
+    Verify access:
+    kubectl get pods -n dev
+    Permissions are enforced by RBAC:
+    Allowed → command succeeds.
+    Not allowed → permission denied.
+
+6. Accessing Services in Kubernetes
+    Service Type	Access Method
+    ClusterIP	Only inside cluster; use kubectl port-forward for external access
+    NodePort	Access via <worker-node-IP>:<nodePort>
+    LoadBalancer	Access via cloud provider ELB DNS/IP
+    Example: Port-forward 
+    kubectl port-forward svc/myapp 8080:80 -n dev
+
+7. Key Takeaways
+    Kubernetes does not create users; it only enforces permissions via RBAC.
+    Users can be IAM users, certificates, OIDC users, or tokens.
+    Always follow least privilege principle: give only required permissions.
+    Roles + RoleBindings control namespace-scoped access, ClusterRoles + ClusterRoleBindings control cluster-wide access.
