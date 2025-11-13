@@ -1,0 +1,51 @@
+name: Build and Push to ECR
+
+on:
+  push:
+    branches:
+      - master   # or your branch
+
+permissions:
+  id-token: write       # required for OIDC
+  contents: read
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::486408064722:oidc-provider/token.actions.githubusercontent.com
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region us-east-1 | \
+          docker login --username AWS --password-stdin 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services
+
+      - name: Build and tag frontend image
+        run: |
+          docker build -t frontend:latest ./frontend
+          docker tag frontend:latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:frontend-latest
+          docker tag frontend:latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:frontend-v2
+
+      - name: Build and tag backend image
+        run: |
+          docker build -t backend:latest ./backend
+          docker tag backend:latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:backend-latest
+          docker tag backend:latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:backend-v2
+
+      - name: Push frontend image
+        run: |
+          docker push 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:frontend-latest
+          docker push 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:frontend-v2
+
+      - name: Push backend image
+        run: |
+          docker push 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:backend-latest
+          docker push 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:backend-v2
