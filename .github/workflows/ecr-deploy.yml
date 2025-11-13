@@ -1,73 +1,74 @@
-name: Tag, Push, and Deploy to ECR + K8s via ArgoCD
+name: Pull, Push to ECR and Deploy to Kubernetes
 
 on:
+  workflow_dispatch:        # Allows manual trigger
   push:
     branches:
-      - master
-  workflow_dispatch:
-    inputs:
-      frontend-tag:
-        description: 'Frontend tag to deploy'
-        required: false
-        default: 'frontend-v2'
-      backend-tag:
-        description: 'Backend tag to deploy'
-        required: false
-        default: 'backend-v2'
+      - master             # Trigger on push to master
 
 permissions:
-  id-token: write       # OIDC for AWS
-  contents: write       # Needed to update manifests
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  SOURCE_ECR: 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application
+  TARGET_ECR: 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services
+  K8S_YAML_DIR: k8s-yaml-files
 
 jobs:
-  tag-push-deploy:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Configure AWS credentials using OIDC
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
           role-to-assume: arn:aws:iam::486408064722:role/github-ecr-k8s-automation
-          aws-region: us-east-1
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
+      - name: Login to ECR
         run: |
-          aws ecr get-login-password --region us-east-1 | \
-          docker login --username AWS --password-stdin 486408064722.dkr.ecr.us-east-1.amazonaws.com
+          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $TARGET_ECR
 
       - name: Pull, tag, and push frontend image
         run: |
-          FRONTEND_TAG="${{ github.event.inputs.frontend-tag || 'frontend-v2' }}"
-          docker pull 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:frontend-latest
-          docker tag 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:frontend-latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:$FRONTEND_TAG
-          docker push 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:$FRONTEND_TAG
+          FRONTEND_TAG="frontend-v2"
+          docker pull $SOURCE_ECR:frontend-latest
+          docker tag $SOURCE_ECR:frontend-latest $TARGET_ECR:$FRONTEND_TAG
+          docker push $TARGET_ECR:$FRONTEND_TAG
 
       - name: Pull, tag, and push backend image
         run: |
-          BACKEND_TAG="${{ github.event.inputs.backend-tag || 'backend-v2' }}"
-          docker pull 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:backend-latest
-          docker tag 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:backend-latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:$BACKEND_TAG
-          docker push 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:$BACKEND_TAG
+          BACKEND_TAG="backend-v2"
+          docker pull $SOURCE_ECR:backend-latest
+          docker tag $SOURCE_ECR:backend-latest $TARGET_ECR:$BACKEND_TAG
+          docker push $TARGET_ECR:$BACKEND_TAG
 
-      - name: Update frontend deployment manifest
+      - name: Set KUBECONFIG (from GitHub Secrets)
         run: |
-          FRONTEND_TAG="${{ github.event.inputs.frontend-tag || 'frontend-v2' }}"
-          sed -i "s|image: .*front-back-end-services:.*|image: 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:$FRONTEND_TAG|" k8s-yaml-files/frontend-deployment.yaml
-          git config user.name "anand"
-          git config user.email "anand@github.com"
-          git add k8s-yaml-files/frontend-deployment.yaml
-          git commit -m "Update frontend image tag to $FRONTEND_TAG"
-          git push
+          echo "${{ secrets.KUBECONFIG }}" > kubeconfig.yaml
+          export KUBECONFIG=$(pwd)/kubeconfig.yaml
 
-      - name: Update backend deployment manifest
+      - name: Update Kubernetes deployments
         run: |
-          BACKEND_TAG="${{ github.event.inputs.backend-tag || 'backend-v2' }}"
-          sed -i "s|image: .*front-back-end-services:.*|image: 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:$BACKEND_TAG|" k8s-yaml-files/backend-deployment.yaml
-          git config user.name "anand"
-          git config user.email "anand@github.com"
-          git add k8s-yaml-files/backend-deployment.yaml
-          git commit -m "Update backend image tag to $BACKEND_TAG"
-          git push
+          # Update the image tags in your deployment YAML
+          sed -i "s|image: $TARGET_ECR:frontend-latest|image: $TARGET_ECR:frontend-v2|g" $K8S_YAML_DIR/frontend-deployment.yaml
+          sed -i "s|image: $TARGET_ECR:backend-latest|image: $TARGET_ECR:backend-v2|g" $K8S_YAML_DIR/backend-deployment.yaml
+
+          # Apply the manifests
+          kubectl apply -f $K8S_YAML_DIR/
+
+          # Verify rollout success
+          kubectl rollout status deployment/frontend -n default
+          kubectl rollout status deployment/backend -n default
+
+      - name: Rollback if deployment failed
+        if: failure()
+        run: |
+          echo "Deployment failed, rolling back..."
+          kubectl rollout undo deployment/frontend -n default
+          kubectl rollout undo deployment/backend -n default
