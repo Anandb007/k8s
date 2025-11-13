@@ -1,20 +1,20 @@
-name: Build and Push to ECR
+name: Pull, Tag, and Push to ECR
 
 on:
   push:
     branches:
-      - master   # or your branch
+      - master  # Trigger when changes are pushed to master
 
 permissions:
-  id-token: write       # required for OIDC
+  id-token: write       # Required for OIDC
   contents: read
 
 jobs:
-  build-and-push:
+  ecr-tag-push:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout repo
         uses: actions/checkout@v3
 
       - name: Configure AWS credentials using OIDC
@@ -26,26 +26,20 @@ jobs:
       - name: Login to Amazon ECR
         run: |
           aws ecr get-login-password --region us-east-1 | \
-          docker login --username AWS --password-stdin 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services
+          docker login --username AWS --password-stdin 486408064722.dkr.ecr.us-east-1.amazonaws.com
 
-      - name: Build and tag frontend image
+      - name: Pull, tag, and push frontend image
         run: |
-          docker build -t frontend:latest ./frontend
-          docker tag frontend:latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:frontend-latest
-          docker tag frontend:latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:frontend-v2
-
-      - name: Build and tag backend image
-        run: |
-          docker build -t backend:latest ./backend
-          docker tag backend:latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:backend-latest
-          docker tag backend:latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:backend-v2
-
-      - name: Push frontend image
-        run: |
+          docker pull 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:frontend-latest
+          docker tag 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:frontend-latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:frontend-latest
+          docker tag 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:frontend-latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:frontend-v2
           docker push 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:frontend-latest
           docker push 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:frontend-v2
 
-      - name: Push backend image
+      - name: Pull, tag, and push backend image
         run: |
+          docker pull 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:backend-latest
+          docker tag 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:backend-latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:backend-latest
+          docker tag 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:backend-latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:backend-v2
           docker push 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:backend-latest
           docker push 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:backend-v2
