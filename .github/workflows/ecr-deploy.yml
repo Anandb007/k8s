@@ -1,16 +1,16 @@
-name: Pull, Tag, and Push to ECR
+name: Tag and Push Existing ECR Images
 
 on:
   push:
     branches:
-      - master  # Trigger when changes are pushed to master
+      - master   # Trigger on push to master branch
 
 permissions:
   id-token: write       # Required for OIDC
   contents: read
 
 jobs:
-  ecr-tag-push:
+  tag-and-push:
     runs-on: ubuntu-latest
 
     steps:
@@ -30,16 +30,26 @@ jobs:
 
       - name: Pull, tag, and push frontend image
         run: |
+          # Pull existing frontend image
           docker pull 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:frontend-latest
+          
+          # Tag with new tags without modifying the original image
           docker tag 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:frontend-latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:frontend-latest
           docker tag 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:frontend-latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:frontend-v2
+          
+          # Push new tags
           docker push 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:frontend-latest
           docker push 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:frontend-v2
 
       - name: Pull, tag, and push backend image
         run: |
+          # Pull existing backend image
           docker pull 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:backend-latest
+          
+          # Tag with new tags without modifying the original image
           docker tag 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:backend-latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:backend-latest
           docker tag 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:backend-latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:backend-v2
+          
+          # Push new tags
           docker push 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:backend-latest
           docker push 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:backend-v2
