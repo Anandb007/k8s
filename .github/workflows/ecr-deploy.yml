@@ -1,16 +1,26 @@
-name: Tag and Push Existing ECR Images
+name: Tag, Push, and Deploy to ECR + K8s via ArgoCD
 
 on:
   push:
     branches:
-      - master   # Trigger on push to master branch
+      - master
+  workflow_dispatch:
+    inputs:
+      frontend-tag:
+        description: 'Frontend tag to deploy'
+        required: false
+        default: 'frontend-v2'
+      backend-tag:
+        description: 'Backend tag to deploy'
+        required: false
+        default: 'backend-v2'
 
 permissions:
-  id-token: write       # Required for OIDC
-  contents: read
+  id-token: write       # OIDC for AWS
+  contents: write       # Needed to update manifests
 
 jobs:
-  tag-and-push:
+  tag-push-deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -30,26 +40,34 @@ jobs:
 
       - name: Pull, tag, and push frontend image
         run: |
-          # Pull existing frontend image
+          FRONTEND_TAG="${{ github.event.inputs.frontend-tag || 'frontend-v2' }}"
           docker pull 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:frontend-latest
-          
-          # Tag with new tags without modifying the original image
-          docker tag 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:frontend-latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:frontend-latest
-          docker tag 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:frontend-latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:frontend-v2
-          
-          # Push new tags
-          docker push 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:frontend-latest
-          docker push 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:frontend-v2
+          docker tag 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:frontend-latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:$FRONTEND_TAG
+          docker push 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:$FRONTEND_TAG
 
       - name: Pull, tag, and push backend image
         run: |
-          # Pull existing backend image
+          BACKEND_TAG="${{ github.event.inputs.backend-tag || 'backend-v2' }}"
           docker pull 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:backend-latest
-          
-          # Tag with new tags without modifying the original image
-          docker tag 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:backend-latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:backend-latest
-          docker tag 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:backend-latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:backend-v2
-          
-          # Push new tags
-          docker push 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:backend-latest
-          docker push 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:backend-v2
+          docker tag 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:backend-latest 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:$BACKEND_TAG
+          docker push 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:$BACKEND_TAG
+
+      - name: Update frontend deployment manifest
+        run: |
+          FRONTEND_TAG="${{ github.event.inputs.frontend-tag || 'frontend-v2' }}"
+          sed -i "s|image: .*front-back-end-services:.*|image: 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:$FRONTEND_TAG|" k8s/frontend-deployment.yaml
+          git config user.name "anand"
+          git config user.email "anandb@github.com"
+          git add k8s/frontend-deployment.yaml
+          git commit -m "Update frontend image tag to $FRONTEND_TAG"
+          git push
+
+      - name: Update backend deployment manifest
+        run: |
+          BACKEND_TAG="${{ github.event.inputs.backend-tag || 'backend-v2' }}"
+          sed -i "s|image: .*front-back-end-services:.*|image: 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:$BACKEND_TAG|" k8s/backend-deployment.yaml
+          git config user.name "anand"
+          git config user.email "anandb@github.com"
+          git add k8s/backend-deployment.yaml
+          git commit -m "Update backend image tag to $BACKEND_TAG"
+          git push
