@@ -4,7 +4,7 @@ metadata:
   name: myapp-backend
   namespace: default
 spec:
-  replicas: 2
+  replicas: 0
   strategy:
     type: RollingUpdate
     rollingUpdate:
