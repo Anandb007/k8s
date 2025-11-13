@@ -1,74 +1,95 @@
-name: Pull, Push to ECR and Deploy to Kubernetes
+name: Auto Tag, Push, and Deploy to ECR via ArgoCD
 
 on:
-  workflow_dispatch:        # Allows manual trigger
+  workflow_dispatch: # Allows manual trigger for testing
   push:
     branches:
-      - master             # Trigger on push to master
+      - master
 
 permissions:
   id-token: write
   contents: read
 
-env:
-  AWS_REGION: us-east-1
-  SOURCE_ECR: 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application
-  TARGET_ECR: 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services
-  K8S_YAML_DIR: k8s-yaml-files
-
 jobs:
-  deploy:
+  ecr-auto-tag-deploy:
     runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: us-east-1
+      SOURCE_ECR: 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application
+      TARGET_ECR: 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials using OIDC
         uses: aws-actions/configure-aws-credentials@v2
         with:
           role-to-assume: arn:aws:iam::486408064722:role/github-ecr-k8s-automation
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to ECR
+      - name: Login to Amazon ECR
         run: |
-          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $TARGET_ECR
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+          docker login --username AWS --password-stdin ${{ env.TARGET_ECR }}
+
+      - name: Determine next tag for frontend
+        id: frontend_tag
+        run: |
+          echo "Checking existing frontend image tags..."
+          EXISTING_TAGS=$(aws ecr list-images --repository-name front-back-end-services --query 'imageIds[*].imageTag' --output text | tr '\t' '\n' | grep '^frontend-v' || true)
+          if [ -z "$EXISTING_TAGS" ]; then
+            NEXT_TAG="frontend-v1"
+          else
+            MAX=$(echo "$EXISTING_TAGS" | sed 's/frontend-v//' | sort -nr | head -n1)
+            NEXT_NUM=$((MAX + 1))
+            NEXT_TAG="frontend-v$NEXT_NUM"
+          fi
+          echo "Next frontend tag is $NEXT_TAG"
+          echo "NEXT_FRONTEND_TAG=$NEXT_TAG" >> $GITHUB_ENV
+
+      - name: Determine next tag for backend
+        id: backend_tag
+        run: |
+          echo "Checking existing backend image tags..."
+          EXISTING_TAGS=$(aws ecr list-images --repository-name front-back-end-services --query 'imageIds[*].imageTag' --output text | tr '\t' '\n' | grep '^backend-v' || true)
+          if [ -z "$EXISTING_TAGS" ]; then
+            NEXT_TAG="backend-v1"
+          else
+            MAX=$(echo "$EXISTING_TAGS" | sed 's/backend-v//' | sort -nr | head -n1)
+            NEXT_NUM=$((MAX + 1))
+            NEXT_TAG="backend-v$NEXT_NUM"
+          fi
+          echo "Next backend tag is $NEXT_TAG"
+          echo "NEXT_BACKEND_TAG=$NEXT_TAG" >> $GITHUB_ENV
 
       - name: Pull, tag, and push frontend image
         run: |
-          FRONTEND_TAG="frontend-v2"
-          docker pull $SOURCE_ECR:frontend-latest
-          docker tag $SOURCE_ECR:frontend-latest $TARGET_ECR:$FRONTEND_TAG
-          docker push $TARGET_ECR:$FRONTEND_TAG
+          docker pull ${{ env.SOURCE_ECR }}:frontend-latest
+          docker tag ${{ env.SOURCE_ECR }}:frontend-latest ${{ env.TARGET_ECR }}:${{ env.NEXT_FRONTEND_TAG }}
+          docker push ${{ env.TARGET_ECR }}:${{ env.NEXT_FRONTEND_TAG }}
 
       - name: Pull, tag, and push backend image
         run: |
-          BACKEND_TAG="backend-v2"
-          docker pull $SOURCE_ECR:backend-latest
-          docker tag $SOURCE_ECR:backend-latest $TARGET_ECR:$BACKEND_TAG
-          docker push $TARGET_ECR:$BACKEND_TAG
+          docker pull ${{ env.SOURCE_ECR }}:backend-latest
+          docker tag ${{ env.SOURCE_ECR }}:backend-latest ${{ env.TARGET_ECR }}:${{ env.NEXT_BACKEND_TAG }}
+          docker push ${{ env.TARGET_ECR }}:${{ env.NEXT_BACKEND_TAG }}
 
-      - name: Set KUBECONFIG (from GitHub Secrets)
+      - name: Update Kubernetes manifests with new image tags
         run: |
-          echo "${{ secrets.KUBECONFIG }}" > kubeconfig.yaml
-          export KUBECONFIG=$(pwd)/kubeconfig.yaml
+          sed -i "s|image: ${{ env.TARGET_ECR }}:frontend-latest|image: ${{ env.TARGET_ECR }}:${{ env.NEXT_FRONTEND_TAG }}|g" k8s-yaml-files/frontend-deployment.yaml
+          sed -i "s|image: ${{ env.TARGET_ECR }}:backend-latest|image: ${{ env.TARGET_ECR }}:${{ env.NEXT_BACKEND_TAG }}|g" k8s-yaml-files/backend-deployment.yaml
 
-      - name: Update Kubernetes deployments
+      - name: Commit updated manifests (optional)
         run: |
-          # Update the image tags in your deployment YAML
-          sed -i "s|image: $TARGET_ECR:frontend-latest|image: $TARGET_ECR:frontend-v2|g" $K8S_YAML_DIR/frontend-deployment.yaml
-          sed -i "s|image: $TARGET_ECR:backend-latest|image: $TARGET_ECR:backend-v2|g" $K8S_YAML_DIR/backend-deployment.yaml
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add k8s-yaml-files/*.yaml
+          git commit -m "Update image tags to ${{ env.NEXT_FRONTEND_TAG }} / ${{ env.NEXT_BACKEND_TAG }}" || echo "No changes to commit"
+          git push origin master || echo "Push failed (probably no changes)"
 
-          # Apply the manifests
-          kubectl apply -f $K8S_YAML_DIR/
-
-          # Verify rollout success
-          kubectl rollout status deployment/frontend -n default
-          kubectl rollout status deployment/backend -n default
-
-      - name: Rollback if deployment failed
-        if: failure()
+      - name: Trigger ArgoCD sync
         run: |
-          echo "Deployment failed, rolling back..."
-          kubectl rollout undo deployment/frontend -n default
-          kubectl rollout undo deployment/backend -n default
+          # Assumes ArgoCD CLI is installed and logged in
+          argocd app sync your-argocd-app-name
