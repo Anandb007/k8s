@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp-frontend
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: myapp-frontend
+  template:
+    metadata:
+      labels:
+        app: myapp-frontend
+    spec:
+      tolerations:
+        - key: "app"
+          operator: "Equal"
+          value: "myapp"
+          effect: "NoSchedule"
+      containers:
+        - name: myapp-frontend
+          image: 486408064722.dkr.ecr.us-east-1.amazonaws.com/frontend-backend-application:frontend-latest
+          ports:
+            - containerPort: 80
+          # Adjust probes to match your frontend app root
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      imagePullSecrets:
+        - name: ecr-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: myapp-frontend-service
+spec:
+  selector:
+    app: myapp-frontend
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+
