@@ -1,0 +1,21 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: myapp-frontend-pdb
+  namespace: default
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: myapp-frontend
+
+root@master-node:/home/ubuntu/k8s-files# cat backend-pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: myapp-backend-pdb
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: myapp-backend
