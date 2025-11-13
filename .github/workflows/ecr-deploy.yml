@@ -1,11 +1,10 @@
 name: Auto Tag, Push, and Deploy to ECR via ArgoCD
 
 on:
-  workflow_dispatch: # Allows manual trigger for testing
-
-push:
-  branches:
-    - master
+  workflow_dispatch: # Allows manual trigger
+  push:
+    branches:
+      - master
 
 permissions:
   id-token: write
