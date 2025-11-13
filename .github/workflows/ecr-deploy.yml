@@ -55,19 +55,19 @@ jobs:
       - name: Update frontend deployment manifest
         run: |
           FRONTEND_TAG="${{ github.event.inputs.frontend-tag || 'frontend-v2' }}"
-          sed -i "s|image: .*front-back-end-services:.*|image: 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:$FRONTEND_TAG|" k8s/frontend-deployment.yaml
+          sed -i "s|image: .*front-back-end-services:.*|image: 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:$FRONTEND_TAG|" k8s-yaml-files/frontend-deployment.yaml
           git config user.name "anand"
-          git config user.email "anandb@github.com"
-          git add k8s/frontend-deployment.yaml
+          git config user.email "anand@github.com"
+          git add k8s-yaml-files/frontend-deployment.yaml
           git commit -m "Update frontend image tag to $FRONTEND_TAG"
           git push
 
       - name: Update backend deployment manifest
         run: |
           BACKEND_TAG="${{ github.event.inputs.backend-tag || 'backend-v2' }}"
-          sed -i "s|image: .*front-back-end-services:.*|image: 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:$BACKEND_TAG|" k8s/backend-deployment.yaml
+          sed -i "s|image: .*front-back-end-services:.*|image: 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:$BACKEND_TAG|" k8s-yaml-files/backend-deployment.yaml
           git config user.name "anand"
-          git config user.email "anandb@github.com"
-          git add k8s/backend-deployment.yaml
+          git config user.email "anand@github.com"
+          git add k8s-yaml-files/backend-deployment.yaml
           git commit -m "Update backend image tag to $BACKEND_TAG"
           git push
