@@ -25,7 +25,7 @@ spec:
           effect: "NoSchedule"
       containers:
         - name: myapp-frontend
-          image: 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:{{FRONTEND_TAG}}
+          image: 486408064722.dkr.ecr.us-east-1.amazonaws.com/front-back-end-services:frontend-latest
           ports:
             - containerPort: 80
           # Adjust probes to match your frontend app root
