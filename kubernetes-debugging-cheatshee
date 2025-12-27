@@ -1,0 +1,237 @@
+Kubernetes Debugging Cheat Sheet 🛠️
+
+A mental model + troubleshooting guide for common Kubernetes pod and cluster issues, mapped to who is responsible and how to debug.
+
+🔍 High-Level Responsibility Map
+Problem	              Look At
+Pod Pending	          Scheduler (Cluster)
+ImagePullBackOff	    Node (kubelet)
+CrashLoopBackOff	    Node (kubelet)
+Wrong replicas	      Controller (Cluster)
+API not responding	  Control Plane
+
+_______________________________________________
+1️⃣ Pod Pending → Scheduler (Cluster)
+What “Pending” Means
+
+A pod exists in the cluster but is not running.
+
+⚠️ There are two very different kinds of Pending. This distinction is critical.
+
+Case A: Pending + NO node assigned
+kubectl get pod -o wide
+    STATUS: Pending
+    NODE: <none>
+
+Why This Happens
+    The scheduler cannot find a suitable node.
+
+Common scheduler reasons:
+    Not enough CPU or memory
+    nodeSelector does not match any node
+    Node taints without matching tolerations
+    Affinity / anti-affinity rules too strict
+
+👉 Scheduler is responsible → think cluster-level constraints.
+
+How to Debug
+    kubectl describe pod <pod-name>
+
+Look for:
+    FailedScheduling
+    Insufficient cpu
+    Insufficient memory
+
+Case B: Pending + node assigned
+    STATUS: Pending
+    NODE: worker-1
+⚠️ This is no longer the scheduler.
+This is now a kubelet (node-level) problem — a common mistake.
+
+________________________________________________________________
+2️⃣ ImagePullBackOff → Node (kubelet)
+What It Means
+    Scheduler has already assigned the pod to a node  
+    kubelet is trying to pull the container image
+    Image pull is failing
+
+Why kubelet Is Responsible
+
+Image pulling happens on the node
+
+Uses:
+
+Node network
+
+DNS
+
+Registry credentials
+
+Common Causes
+
+Wrong image name or tag
+
+No access to private registry
+
+Missing or incorrect imagePullSecrets
+
+Node has no internet access
+
+How to Debug
+kubectl describe pod <pod-name>
+
+
+Look for:
+
+Failed to pull image
+
+ImagePullBackOff
+
+🧠 Node-level thinking:
+
+Can this node reach the registry?
+
+Are credentials configured correctly?
+
+3️⃣ CrashLoopBackOff → Node (kubelet)
+What It Means
+
+The container:
+
+Starts
+
+Crashes
+
+Restarts
+
+Repeats endlessly
+
+Why kubelet Is Responsible
+
+kubelet starts the container
+
+Monitors exit codes
+
+Restarts the container on failure
+
+Common Causes
+
+Application crashes
+
+Wrong command or arguments
+
+Missing environment variables
+
+App exits immediately
+
+How to Debug
+kubectl logs <pod-name>
+kubectl describe pod <pod-name>
+
+
+🧠 Key Idea
+
+Kubernetes is working correctly.
+Your application is broken.
+
+4️⃣ Wrong Replicas → Controller (Cluster)
+What It Means
+
+You asked for:
+
+replicas: 3
+
+
+But you see:
+
+Only 1 pod running
+or
+
+More pods than expected
+
+Why Controller Is Responsible
+
+Controllers:
+
+Continuously compare desired state vs actual state
+
+Create or delete pods to fix drift
+
+If replicas are wrong:
+
+Controller may not be functioning correctly
+
+OR pods can’t be created due to scheduler/node issues
+
+How to Debug
+kubectl get deployment
+kubectl describe deployment
+kubectl get rs
+
+
+Look for:
+
+Events
+
+Failed pod creation
+
+ReplicaSet errors
+
+5️⃣ API Not Responding → Control Plane
+What It Means
+kubectl get pods
+
+
+Hangs
+
+Or returns:
+
+Unable to connect to the server
+
+Why Control Plane Is Responsible
+
+Everything flows through:
+
+kube-apiserver
+
+etcd
+
+If these are down or slow:
+
+The entire cluster is effectively frozen
+
+How to Debug
+Self-Managed Cluster
+kubectl get componentstatuses
+kubectl logs kube-apiserver
+
+Managed Kubernetes (e.g. EKS)
+
+CloudWatch logs
+
+API server metrics
+
+IAM authentication issues
+
+🧠 SUPER IMPORTANT DEBUGGING RULE (MEMORIZE)
+
+Always debug in this order:
+
+Is the API server reachable?
+
+Did the scheduler assign a node?
+
+Is kubelet running the pod?
+
+Is a controller fixing state drift?
+
+➡️ Following this order saves hours of debugging.
+
+🔥 Real-Life Symptom → Responsibility Mapping
+Symptom	Think
+Pending + no node	Scheduler
+Pending + node	kubelet
+Image pull error	kubelet
+CrashLoopBackOff	App / kubelet
+Wrong pod count	Controller
+kubectl broken	Control Plane
