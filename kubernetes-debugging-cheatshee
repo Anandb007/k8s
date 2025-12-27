@@ -56,182 +56,129 @@ What It Means
     Image pull is failing
 
 Why kubelet Is Responsible
-
-Image pulling happens on the node
+    Image pulling happens on the node
 
 Uses:
-
-Node network
-
-DNS
-
-Registry credentials
+    Node network
+    DNS
+    Registry credentials
 
 Common Causes
-
-Wrong image name or tag
-
-No access to private registry
-
-Missing or incorrect imagePullSecrets
-
-Node has no internet access
+    Wrong image name or tag
+    No access to private registry
+    Missing or incorrect imagePullSecrets  
+    Node has no internet access
 
 How to Debug
 kubectl describe pod <pod-name>
-
-
-Look for:
-
-Failed to pull image
-
-ImagePullBackOff
-
+    Look for:
+    Failed to pull image
+    ImagePullBackOff
 🧠 Node-level thinking:
-
-Can this node reach the registry?
-
-Are credentials configured correctly?
-
+    Can this node reach the registry?    
+    Are credentials configured correctly?
+_______________________________________________
 3️⃣ CrashLoopBackOff → Node (kubelet)
+
 What It Means
-
-The container:
-
-Starts
-
-Crashes
-
-Restarts
-
-Repeats endlessly
+    The container:
+    Starts
+    Crashes
+    Restarts
+    Repeats endlessly
 
 Why kubelet Is Responsible
-
-kubelet starts the container
-
-Monitors exit codes
-
-Restarts the container on failure
+    kubelet starts the container
+    Monitors exit codes
+    Restarts the container on failure
 
 Common Causes
-
-Application crashes
-
-Wrong command or arguments
-
-Missing environment variables
-
-App exits immediately
+    Application crashes
+    Wrong command or arguments
+    Missing environment variables
+    App exits immediately
 
 How to Debug
-kubectl logs <pod-name>
-kubectl describe pod <pod-name>
+    kubectl logs <pod-name>
+    kubectl describe pod <pod-name>
 
 
 🧠 Key Idea
+    Kubernetes is working correctly.
+    Your application is broken.
 
-Kubernetes is working correctly.
-Your application is broken.
-
+_________________________________________________________
 4️⃣ Wrong Replicas → Controller (Cluster)
 What It Means
-
-You asked for:
-
-replicas: 3
-
-
-But you see:
-
-Only 1 pod running
-or
-
-More pods than expected
-
-Why Controller Is Responsible
-
-Controllers:
-
-Continuously compare desired state vs actual state
-
-Create or delete pods to fix drift
-
-If replicas are wrong:
-
-Controller may not be functioning correctly
-
-OR pods can’t be created due to scheduler/node issues
+        You asked for:
+        replicas: 3
+        But you see:
+        Only 1 pod running
+        or
+        More pods than expected
+        
+Why Controller Is Responsible        
+        Controllers:
+        Continuously compare desired state vs actual state
+        Create or delete pods to fix drift
+        If replicas are wrong:
+        Controller may not be functioning correctlz        
+        OR pods can’t be created due to scheduler/node issues
 
 How to Debug
-kubectl get deployment
-kubectl describe deployment
-kubectl get rs
+        kubectl get deployment
+        kubectl describe deployment
+        kubectl get rs
 
 
 Look for:
-
-Events
-
-Failed pod creation
-
-ReplicaSet errors
+    Events
+    Failed pod creation    
+    ReplicaSet errors
+___________________________________________________________
 
 5️⃣ API Not Responding → Control Plane
+
 What It Means
-kubectl get pods
-
-
-Hangs
-
-Or returns:
-
-Unable to connect to the server
+    kubectl get pods
+    Hangs
+    Or returns:
+    Unable to connect to the server
 
 Why Control Plane Is Responsible
-
-Everything flows through:
-
-kube-apiserver
-
-etcd
-
-If these are down or slow:
-
-The entire cluster is effectively frozen
+    Everything flows through:
+    kube-apiserver
+    etcd
+    If these are down or slow:    
+    The entire cluster is effectively frozen
 
 How to Debug
-Self-Managed Cluster
-kubectl get componentstatuses
-kubectl logs kube-apiserver
+    Self-Managed Cluster
+    kubectl get componentstatuses
+    kubectl logs kube-apiserver
 
 Managed Kubernetes (e.g. EKS)
 
-CloudWatch logs
-
-API server metrics
-
-IAM authentication issues
+    CloudWatch logs
+    API server metrics  
+    IAM authentication issues
 
 🧠 SUPER IMPORTANT DEBUGGING RULE (MEMORIZE)
 
 Always debug in this order:
 
-Is the API server reachable?
-
-Did the scheduler assign a node?
-
-Is kubelet running the pod?
-
-Is a controller fixing state drift?
-
+    Is the API server reachable?
+    Did the scheduler assign a node?
+    Is kubelet running the pod?
+    Is a controller fixing state drift?
+______________________________________________________________________
 ➡️ Following this order saves hours of debugging.
 
 🔥 Real-Life Symptom → Responsibility Mapping
-Symptom	Think
-Pending + no node	Scheduler
-Pending + node	kubelet
-Image pull error	kubelet
-CrashLoopBackOff	App / kubelet
-Wrong pod count	Controller
-kubectl broken	Control Plane
+    Symptom	Think
+    Pending + no node	Scheduler
+    Pending + node	kubelet
+    Image pull error	kubelet
+    CrashLoopBackOff	App / kubelet
+    Wrong pod count	Controller
+    kubectl broken	Control Plane
