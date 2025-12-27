@@ -182,3 +182,360 @@ ______________________________________________________________________
     CrashLoopBackOff	App / kubelet
     Wrong pod count	Controller
     kubectl broken	Control Plane
+_____________________________________________________________________
+🟡POD / WORKLOAD ISSUES
+-------------------------------------------------------------------------------------------------------------------------------
+| Problem / Symptom             | Look at             | Why                       | Where to Debug                            |
+| ----------------------------- | ------------------- | ------------------------- | ----------------------------------------- |
+| Pod Pending (NODE = `<none>`) | Scheduler (cluster) | No suitable node          | `kubectl describe pod` (FailedScheduling) |
+| Pod Pending (NODE assigned)   | Node (kubelet)      | Node can’t start pod      | `kubectl describe pod`, events            |
+| ContainerCreating too long    | Node (kubelet)      | Image pull / volume / CNI | `kubectl describe pod`, node logs         |
+| ImagePullBackOff              | Node (kubelet)      | Image pull failed         | `kubectl describe pod`                    |
+| CrashLoopBackOff              | Node / App          | App crashes               | `kubectl logs`, `--previous`              |
+| Pod OOMKilled                 | Node / Container    | Memory limit exceeded     | `kubectl describe pod`, metrics           |
+| Pod stuck Terminating         | Node / API          | Finalizer / volume issue  | `kubectl describe pod`, finalizers        |
+| Pod restarting frequently     | Node                | Liveness probe failing    | `kubectl describe pod`, probes            |
+
+
+🟠 SCHEDULING & RESOURCE ISSUES
+-----------------------------------------------------------------------------------------
+| Problem                  | Look at   | Why                   | Where                  |
+| ------------------------ | --------- | --------------------- | ---------------------- |
+| Insufficient CPU         | Scheduler | Requests too high     | `kubectl describe pod` |
+| Insufficient Memory      | Scheduler | Node memory exhausted | `kubectl describe pod` |
+| NodeSelector mismatch    | Scheduler | No matching labels    | `kubectl describe pod` |
+| Taint without toleration | Scheduler | Pod not allowed       | `kubectl describe pod` |
+| Affinity rules fail      | Scheduler | Too strict rules      | Pod events             |
+
+
+🔵 NODE-LEVEL ISSUES
+----------------------------------------------------------------------------------------------
+| Problem            | Look at        | Why                        | Where                   |
+| ------------------ | -------------- | -------------------------- | ----------------------- |
+| Node NotReady      | Node (kubelet) | Kubelet/network/disk issue | `kubectl describe node` |
+| DiskPressure       | Node           | Disk almost full           | `kubectl describe node` |
+| MemoryPressure     | Node           | Memory exhausted           | `kubectl describe node` |
+| NetworkUnavailable | Node / CNI     | CNI broken                 | Node logs               |
+| Kubelet stopped    | Node           | Service down               | `journalctl -u kubelet` |
+
+
+🟣 NETWORKING ISSUES
+------------------------------------------------------------------------------------------------
+| Problem                 | Look at          | Why                   | Where                   |
+| ----------------------- | ---------------- | --------------------- | ----------------------- |
+| Service not reachable   | kube-proxy / CNI | Routing rules broken  | `kubectl describe svc`  |
+| Pod can’t reach Pod     | CNI              | Network policy / CNI  | CNI logs                |
+| DNS not working         | CoreDNS          | DNS failure           | `kubectl logs coredns`  |
+| External traffic fails  | Ingress / LB     | Misconfigured ingress | Ingress events          |
+| Service endpoints empty | Controller       | No ready pods         | `kubectl get endpoints` |
+
+
+🟢 CONTROLLER ISSUES
+--------------------------------------------------------------------------------------------------
+| Problem                  | Look at        | Why                | Where                         |
+| ------------------------ | -------------- | ------------------ | ----------------------------- |
+| Wrong replica count      | Controller     | Controller failing | `kubectl describe deployment` |
+| Deployment stuck         | Controller     | Rollout blocked    | `kubectl rollout status`      |
+| Old pods not terminating | Controller     | Finalizers / PDB   | Pod describe                  |
+| HPA not scaling          | HPA controller | Metrics missing    | `kubectl describe hpa`        |
+
+
+🔴 STORAGE ISSUES
+-----------------------------------------------------------------------------------------------------
+| Problem                 | Look at            | Why                       | Where                  |
+| ----------------------- | ------------------ | ------------------------- | ---------------------- |
+| PVC Pending             | Storage controller | No PV available           | `kubectl describe pvc` |
+| Volume mount failed     | Node               | Permission / attach issue | Pod events             |
+| Read-only filesystem    | Node               | Disk issue                | Node logs              |
+| EBS not attaching (EKS) | AWS / Node         | IAM / AZ mismatch         | Pod events             |
+
+
+⚫ API / CONTROL PLANE ISSUES
+-----------------------------------------------------------------------------------------------------
+| Problem              | Look at       | Why               | Where                |
+| -------------------- | ------------- | ----------------- | -------------------- |
+| kubectl hangs        | API server    | API down/slow     | Control plane logs   |
+| Forbidden error      | RBAC          | Permission denied | `kubectl auth can-i` |
+| Objects not updating | etcd          | etcd slow         | API latency          |
+| Cluster frozen       | Control plane | etcd full         | Cloud logs           |
+
+
+🧠 DEBUGGING COMMANDS
+kubectl get pods -o wide
+kubectl describe pod
+kubectl get events --sort-by=.metadata.creationTimestamp
+kubectl logs
+kubectl describe node
+
+
+---------------------------------------------------------------------------------------------------------------------------------
+KUBERNETES SERVICES (FROM ZERO)
+First: what problem do Services solve?
+
+Pods:
+
+Are ephemeral
+
+Have changing IPs
+
+Can be recreated anytime
+
+👉 You cannot reliably talk to pods directly.
+
+So Kubernetes introduces Services.
+
+🧱 WHAT IS A SERVICE? (VERY BASIC)
+Simple definition
+
+A Service is:
+
+A stable network endpoint that points to a set of pods.
+
+It gives you:
+
+Stable IP
+
+Stable DNS name
+
+Load balancing
+
+🧠 Key idea (MEMORIZE)
+
+Pods change. Services don’t.
+
+🧩 HOW A SERVICE WORKS (REAL FLOW)
+
+You create pods with labels
+
+You create a Service with a selector
+
+Kubernetes:
+
+Finds matching pods
+
+Creates Endpoints
+
+Routes traffic to pods
+
+🔍 See this live
+kubectl get svc
+kubectl get endpoints
+
+
+Endpoints = actual pod IPs behind the service.
+
+🧪 HANDS-ON SETUP (DO THIS)
+Step 1️⃣ Create a deployment
+kubectl create deployment web --image=nginx
+kubectl scale deployment web --replicas=3
+
+
+Check:
+
+kubectl get pods -o wide
+
+
+Notice:
+
+3 pods
+
+3 different IPs
+
+Step 2️⃣ Expose it as a Service (ClusterIP)
+kubectl expose deployment web --port=80 --target-port=80
+
+
+Check:
+
+kubectl get svc
+
+
+You’ll see:
+
+TYPE: ClusterIP
+CLUSTER-IP: 10.x.x.x
+
+Step 3️⃣ Verify endpoints
+kubectl get endpoints web
+
+
+You’ll see:
+
+IP1:80, IP2:80, IP3:80
+
+
+👉 Service → Endpoints → Pods
+
+🧠 SERVICE TYPES (VERY IMPORTANT)
+1️⃣ ClusterIP (default)
+What it is
+
+Internal-only service
+
+Accessible inside cluster
+
+Used for
+
+Backend services
+
+Microservice-to-microservice communication
+
+Failure modes
+Problem	Look at
+Service not reachable	Endpoints
+No traffic	Selector mismatch
+DNS fails	CoreDNS
+
+Debug:
+
+kubectl describe svc
+kubectl get endpoints
+
+2️⃣ NodePort
+What it is
+
+Exposes service on node IP + port
+
+Port range: 30000–32767
+
+Example:
+
+NodeIP:30080
+
+Used for
+
+Quick testing
+
+Simple external access
+
+Failure modes
+Problem	Look at
+Can’t access	Node firewall
+Traffic uneven	kube-proxy
+
+Debug:
+
+kubectl get svc
+kubectl describe svc
+
+3️⃣ LoadBalancer (cloud only)
+What it is
+
+Creates a cloud load balancer
+
+Routes traffic → nodes → pods
+
+Used for
+
+Production external access
+
+In EKS:
+
+Creates AWS ELB / ALB
+
+Failure modes
+Problem	Look at
+LB not created	Cloud controller
+No traffic	Security groups
+503 errors	Pod readiness
+
+Debug:
+
+kubectl describe svc
+
+🔥 MOST COMMON SERVICE FAILURES (REAL LIFE)
+❌ Service exists but no traffic
+Cause
+
+Selector doesn’t match pod labels.
+
+Check:
+
+kubectl get svc -o yaml
+kubectl get pods --show-labels
+
+❌ Service endpoints empty
+Meaning
+
+Service found zero pods
+
+Debug:
+
+kubectl get endpoints
+
+
+If empty → labels mismatch or pods not Ready.
+
+❌ Pods running but service not reachable
+Common reasons
+
+Readiness probe failing
+
+kube-proxy issue
+
+NetworkPolicy blocking
+
+Debug:
+
+kubectl describe pod
+kubectl get endpoints
+
+🧠 WHO IS RESPONSIBLE? (IMPORTANT)
+Issue	Look at
+No endpoints	Controller
+Traffic not routing	kube-proxy
+DNS not resolving	CoreDNS
+External access fails	LB / cloud
+Pod not in service	Readiness probe
+🧠 DEBUGGING FLOW FOR SERVICES (MEMORIZE)
+
+When service fails:
+
+Does service exist?
+
+kubectl get svc
+
+
+Does it have endpoints?
+
+kubectl get endpoints
+
+
+Are pods Ready?
+
+kubectl describe pod
+
+
+Is DNS resolving?
+
+nslookup service-name
+
+
+Never jump steps.
+
+🧠 ANALOGY (STICKY)
+
+Pods = shop workers
+
+Service = shop phone number
+
+Workers change → phone number stays
+
+✅ CHECKPOINT QUESTIONS (ANSWER MENTALLY)
+
+Can a service exist without pods? → Yes
+
+Can pods exist without a service? → Yes
+
+Does service load balance? → Yes
+
+Does service run containers? → No
+
+If these feel easy → you’re progressing fast.
+
+🔜 NEXT LESSON (VERY IMPORTANT)
+
+👉 Ingress vs Service (how real HTTP traffic enters Kubernetes)
+This is mandatory for EKS and production.
+
+Say “next” when ready 🚀
