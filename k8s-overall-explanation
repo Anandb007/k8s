@@ -1,0 +1,152 @@
+Kubernetes Concepts
+________________________________________
+1. Node Selector, Node Affinity, Pod Affinity, Pod Anti-Affinity, Taints, and Tolerations
+1.1 Node Selector
+•	NodeSelector is the simplest way to assign a pod to a specific node.
+•	Pods will run only on nodes that have matching labels.
+•	It’s a hard requirement: if no node matches, the pod remains pending.
+•	Example:
+nodeSelector:
+  disktype: ssd
+•	Meaning: Pod will only run on nodes labeled disktype=ssd.
+________________________________________
+1.2 Node Affinity
+•	Node Affinity is a more flexible version of NodeSelector.
+•	Types:
+1.	Required (hard rule): Pod must run on matching node.
+2.	Preferred (soft rule): Scheduler will try to place pod on preferred nodes, but can place it elsewhere if needed.
+•	Example:
+requiredDuringSchedulingIgnoredDuringExecution:
+  nodeSelectorTerms:
+    - matchExpressions:
+        - key: disktype
+          operator: In
+          values:
+            - ssd
+________________________________________
+1.3 Pod Affinity
+•	Pod Affinity allows pods to run near other pods.
+•	Useful for reducing latency between related components.
+•	Example use case: Backend pod runs on the same node as frontend pod.
+________________________________________
+1.4	Pod Anti-Affinity
+•	Pod Anti-Affinity ensures pods do not run near certain pods.
+•	Useful for high availability or spreading replicas.
+•	Example use case: Avoid placing two database replicas on the same node.
+________________________________________
+1.5 Taints and Tolerations
+•	Taints are applied to nodes to repel pods.
+•	Tolerations are applied to pods to allow them to run on tainted nodes.
+•	Example:
+o	Taint: db=true:NoSchedule → only pods that tolerate this taint can run.
+o	Toleration:
+tolerations:
+- key: "db"
+   operator: "Equal"
+   value: "true"
+   effect: "NoSchedule"
+•	Use case: Dedicated node for MySQL pods; no other pods can run there.
+________________________________________
+2. How a Request Flows from User to Pod
+Step-by-step flow:
+1.	User → LoadBalancer
+o	External load balancer receives the request.
+2.	LoadBalancer → Ingress Controller
+o	Forwarded to the ingress controller service (NodePort or ClusterIP).
+3.	Ingress Controller → Service
+o	Ingress controller checks Ingress rules (host/path) and forwards to the target service.
+4.	Service → kube-proxy
+o	Service IP is virtual.
+o	kube-proxy uses iptables/IPVS rules to route to the correct pod(s).
+5.	Pod receives request
+o	Pod processes the request and sends the response back along the same path.
+Key points:
+•	Service does not forward traffic itself; it’s a virtual abstraction.
+•	kube-proxy does not run pods; it only handles networking.
+•	LoadBalancer does not know ingress rules; it simply forwards traffic.
+________________________________________
+3. Deployment and Pod Lifecycle
+Scenario: Deployment runs multiple pods; one pod fails.
+Step-by-step explanation:
+1.	Pod crashes
+o	Detected by kubelet on the node.
+2.	kubelet → API Server
+o	Reports pod status to the API server.
+3.	API Server → etcd
+o	Stores the current state of the pod in etcd.
+4.	Controller Manager
+o	Watches API server.
+o	Sees: desired replicas ≠ current replicas.
+o	Creates a new Pod object (spec only, no node assigned yet).
+5.	Scheduler
+o	Assigns the new pod to a suitable node based on resource availability.
+o	Updates API server with node assignment.
+6.	kubelet on assigned node
+o	Pulls container image and starts the pod.
+o	Reports status to API server.
+7.	kube-proxy
+o	Not involved in pod creation; only handles networking.
+Interview-ready one-liner:
+When a pod fails, kubelet reports it to the API server, the controller manager creates a replacement pod, the scheduler assigns it to a node, and kubelet starts the pod.
+________________________________________
+4. Horizontal Pod Autoscaler (HPA) and Node Autoscaling
+4.1 Pod Autoscaling (HPA)
+•	HPA automatically scales pods based on metrics (CPU, memory, or custom metrics).
+•	Requires Metrics Server to collect pod resource usage.
+•	Without Metrics Server, HPA cannot scale.
+•	Example:
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-app
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+4.2 Node Autoscaling
+•	Node autoscaling is different from HPA.
+•	Setting min/max nodes in a node group is required, but not sufficient.
+•	Requires Cluster Autoscaler.
+•	Flow:
+1.	HPA increases pods.
+2.	Pending pods cannot be scheduled due to insufficient resources.
+3.	Cluster Autoscaler adds new nodes automatically.
+4.	Scheduler places pods on new nodes.
+Important: Labels on nodes can help identify node groups for autoscaling.
+________________________________________
+4.3 HPA and Memory Scaling Limitations
+•	HPA works best with CPU metrics, not memory.
+•	Reason:
+o	Memory usage is sticky: containers rarely release memory.
+o	Metrics may be delayed, causing scaling to react too late.
+o	Late scaling can lead to OOMKilled pods.
+•	Solution:
+o	Prefer CPU-based HPA.
+o	Combine HPA + Cluster Autoscaler.
+o	Use Vertical Pod Autoscaler (VPA) to scale pod memory.
+Interview one-liner:
+HPA doesn’t scale memory well because memory usage is sticky and not easily released, making scaling reactive and late. CPU-based scaling is much more responsive.
+________________________________________
+5. Summary of Key Components
+Component	Role
+kubelet	Detects pod/container status, runs pods
+API Server	Central hub for cluster state, stores in etcd
+etcd	Stores cluster state (source of truth)
+Controller Manager	Watches API Server, ensures desired state, creates pod specs
+Scheduler	Assigns pods to nodes based on resources
+kube-proxy	Handles service networking (iptables/IPVS)
+Deployment	Manages multiple replicas of pods
+HPA	Scales pods based on metrics
+Metrics Server	Provides metrics for HPA
+Cluster Autoscaler	Scales nodes up/down based on unschedulable pods
+Ingress Controller	Routes external traffic based on Ingress rules
+Service	Virtual abstraction for pod grouping and routing
+
