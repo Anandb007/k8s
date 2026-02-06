@@ -1,0 +1,59 @@
+High Availability (HA) and Disaster Recovery (DR) in Kubernetes
+________________________________________
+1. High Availability (HA)
+Definition:
+Ensures applications remain available even if some components fail.
+Key Areas & Approaches:
+1.	Control Plane HA
+o	Multi-master API servers, controller managers, schedulers.
+o	etcd cluster with odd number of nodes (3, 5, 7) for quorum.
+o	Spread across multiple availability zones (AZs).
+2.	Node & Pod HA
+o	Deploy multiple replicas using Deployments (stateless) or StatefulSets (stateful).
+o	Spread pods across nodes/AZs using:
+	Node Affinity / Anti-Affinity
+	Pod Affinity / Anti-Affinity
+o	Use taints/tolerations for dedicated critical workloads.
+3.	Load Balancing
+o	Use Ingress + LoadBalancer to distribute traffic across pods.
+o	Ensures HA at request level.
+4.	Database HA
+o	Use replication:
+	MySQL: Master-Slave or Group Replication
+	PostgreSQL: Streaming replication
+	MongoDB: Replica Set
+o	Deploy database pods across different nodes or zones.
+________________________________________
+2. Disaster Recovery (DR)
+Definition:
+Ensures recovery from catastrophic failures (e.g., AZ outage, cluster loss, data corruption).
+Key Approaches:
+1.	Backups
+o	Regularly backup etcd and persistent volumes (PVs).
+o	Use tools like Velero, Kasten, or Stash.
+2.	Multi-Region / Multi-Cluster
+o	Deploy a secondary cluster in another region.
+o	Replicate critical data to prevent data loss.
+3.	Restore Testing
+o	Test failure scenarios: node loss, AZ outage, etcd corruption.
+o	Verify pods and data recovery.
+4.	Stateless Applications
+o	Simple redeploy to another cluster or region; no data migration needed.
+5.	Stateful Applications
+o	Use PVs, replication, offsite backups.
+o	Automate restoration processes.
+________________________________________
+3. Best Practices Summary
+Area	Approach
+Control Plane	Multi-master, etcd cluster, spread across AZs
+Nodes & Pods	Multiple replicas, spread across nodes/AZs, use affinity/anti-affinity
+Load Balancing	Ingress / Service LoadBalancer for traffic distribution
+Databases	Replication, failover, cross-AZ deployment, persistent volume backups
+Backups	Regular etcd + PV backups, automated tools
+Disaster Recovery	Secondary cluster/region, DR runbooks, restore testing
+Stateless Apps	Redeploy as needed
+Stateful Apps	Persistent storage, replication, offsite backups
+________________________________________
+Interview-Ready One-Liner
+For HA, deploy multiple replicas across nodes/AZs with load balancing and database replication. For DR, backup etcd and persistent volumes, replicate data to another cluster or region, and test restoration regularly.
+
