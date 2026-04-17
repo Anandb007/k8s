@@ -1,0 +1,668 @@
+# Kubernetes & Helm Practical DevOps Documentation
+
+## 📌 Overview
+
+This document provides a production-oriented reference for Kubernetes resources and Helm usage. It is structured for direct use in repositories without further formatting.
+
+---
+
+# 🧱 Kubernetes Core Resources
+
+## 1. Deployment
+
+Used for managing stateless applications with features like scaling, rolling updates, and self-healing.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web-app
+  template:
+    metadata:
+      labels:
+        app: web-app
+    spec:
+      containers:
+      - name: web-app
+        image: myrepo/web-app:1.2.0
+```
+
+---
+
+## 2. Service
+
+Exposes pods internally or externally.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-app-svc
+spec:
+  selector:
+    app: web-app
+  ports:
+  - port: 80
+    targetPort: 8080
+```
+
+---
+
+## 3. Ingress
+
+Handles external HTTP/HTTPS routing.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-app-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: myapp.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: web-app-svc
+            port:
+              number: 80
+```
+
+---
+
+## 4. HPA (Horizontal Pod Autoscaler)
+
+Automatically scales pods based on metrics.
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: web-app-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: web-app
+  minReplicas: 3
+  maxReplicas: 10
+```
+
+---
+
+## 5. StatefulSet
+
+Used for stateful applications like databases.
+
+```yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+```
+
+---
+
+## 6. Persistent Volume (PV)
+
+```yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv
+spec:
+  capacity:
+    storage: 20Gi
+```
+
+---
+
+## 7. Persistent Volume Claim (PVC)
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc
+spec:
+  resources:
+    requests:
+      storage: 20Gi
+```
+
+---
+
+# ⚙️ Scheduling (Affinity Rules)
+
+## Node Affinity
+
+Controls which nodes a pod can run on.
+
+```yaml
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: workload
+          operator: In
+          values:
+          - frontend
+```
+
+---
+
+## Pod Affinity
+
+Schedules pods near other pods.
+
+```yaml
+affinity:
+  podAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+    - labelSelector:
+        matchLabels:
+          app: redis
+      topologyKey: kubernetes.io/hostname
+```
+
+---
+
+## Pod Anti-Affinity
+
+Prevents pods from being scheduled together.
+
+```yaml
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchLabels:
+            app: web-app
+        topologyKey: kubernetes.io/hostname
+```
+
+---
+
+# Kubernetes (kubectl) Commands – Practical DevOps Reference
+
+## 📌 Overview
+
+---
+
+# 🧱 Cluster & Context Management
+
+| Command                                | Description               | Usage                            |
+| -------------------------------------- | ------------------------- | -------------------------------- |
+| `kubectl config get-contexts`          | List all cluster contexts | View available clusters          |
+| `kubectl config use-context <context>` | Switch cluster            | Avoid deploying to wrong cluster |
+| `kubectl cluster-info`                 | Show cluster details      | Verify cluster access            |
+| `kubectl get nodes`                    | List nodes                | Check cluster capacity           |
+| `kubectl describe node <node>`         | Node details              | Debug node issues                |
+
+---
+
+# 📦 Resource Management
+
+| Command                    | Description        | Usage                   |
+| -------------------------- | ------------------ | ----------------------- |
+| `kubectl get all`          | List all resources | Quick overview          |
+| `kubectl get pods`         | List pods          | Check app status        |
+| `kubectl get pods -o wide` | Detailed pod info  | Check node placement    |
+| `kubectl get svc`          | List services      | Verify networking       |
+| `kubectl get ingress`      | List ingress       | Check external routing  |
+| `kubectl get ns`           | List namespaces    | Multi-environment setup |
+
+---
+
+# 🔍 Debugging & Troubleshooting
+
+| Command                      | Description          | Usage                 |
+| ---------------------------- | -------------------- | --------------------- |
+| `kubectl describe pod <pod>` | Pod details & events | 🔥 Debug failures     |
+| `kubectl logs <pod>`         | View logs            | Application debugging |
+| `kubectl logs -f <pod>`      | Stream logs          | Real-time monitoring  |
+| `kubectl get events`         | Cluster events       | Root cause analysis   |
+| `kubectl top pods`           | Resource usage       | Check load            |
+| `kubectl top nodes`          | Node usage           | Capacity monitoring   |
+
+---
+
+# 🛠️ Deployment & Updates
+
+| Command                          | Description             | Usage                     |
+| -------------------------------- | ----------------------- | ------------------------- |
+| `kubectl apply -f file.yaml`     | Create/update resources | Standard deployment       |
+| `kubectl create -f file.yaml`    | Create only             | Rare use                  |
+| `kubectl delete -f file.yaml`    | Delete resources        | Cleanup                   |
+| `kubectl delete pod <pod>`       | Delete pod              | Restart pod               |
+| `kubectl edit deployment <name>` | Edit live resource      | Quick fix (avoid in prod) |
+| `kubectl diff -f file.yaml`      | Show changes            | Safe deployments          |
+
+---
+
+# 📈 Scaling & Rollouts
+
+| Command                                        | Description   | Usage                  |
+| ---------------------------------------------- | ------------- | ---------------------- |
+| `kubectl scale deployment <name> --replicas=5` | Scale pods    | Manual scaling         |
+| `kubectl rollout status deployment <name>`     | Check rollout | Verify deployment      |
+| `kubectl rollout restart deployment <name>`    | Restart pods  | Apply config changes   |
+| `kubectl rollout undo deployment <name>`       | Rollback      | 🔥 Production recovery |
+
+---
+
+# 🔐 Pod Access & Networking
+
+| Command                                  | Description      | Usage                 |
+| ---------------------------------------- | ---------------- | --------------------- |
+| `kubectl exec -it <pod> -- /bin/sh`      | Access container | Debug inside pod      |
+| `kubectl port-forward pod/<pod> 8080:80` | Local access     | Debug service locally |
+
+---
+
+# 💾 Storage
+
+| Command                       | Description | Usage                |
+| ----------------------------- | ----------- | -------------------- |
+| `kubectl get pv`              | List PVs    | Storage verification |
+| `kubectl get pvc`             | List PVCs   | Check claims         |
+| `kubectl describe pvc <name>` | PVC details | Debug binding issues |
+
+---
+
+# ⚙️ Node Operations
+
+| Command                                           | Description         | Usage               |
+| ------------------------------------------------- | ------------------- | ------------------- |
+| `kubectl cordon <node>`                           | Mark unschedulable  | Maintenance         |
+| `kubectl drain <node>`                            | Evict pods          | Safe shutdown       |
+| `kubectl uncordon <node>`                         | Resume scheduling   | Bring node back     |
+| `kubectl label nodes <node> key=value`            | Add label           | Used for affinity   |
+| `kubectl taint nodes <node> key=value:NoSchedule` | Restrict scheduling | Dedicated workloads |
+
+---
+
+# 🚀 Multi-file & Bulk Operations
+
+| Command                          | Description        | Usage             |
+| -------------------------------- | ------------------ | ----------------- |
+| `kubectl apply -f .`             | Apply all YAMLs    | Deploy full stack |
+| `kubectl apply -f . --recursive` | Apply nested files | Large projects    |
+
+---
+
+# 🔥 Real-World Workflows
+
+## Debugging Flow
+
+```bash id="zq6c6j"
+kubectl get pods
+kubectl describe pod <pod>
+kubectl logs <pod>
+kubectl get events
+```
+
+---
+
+## Deployment Flow
+
+```bash id="36g03q"
+kubectl apply -f deployment.yaml
+kubectl rollout status deployment web-app
+kubectl get pods
+```
+
+---
+
+## Production Rollback
+
+```bash id="d20q8r"
+kubectl rollout undo deployment web-app
+```
+
+---
+
+## Node Troubleshooting
+
+```bash id="sl2k6l"
+kubectl get pods -o wide
+kubectl describe pod <pod>
+kubectl get nodes
+kubectl top nodes
+```
+
+---
+
+# ⚠️ Common Mistakes
+
+* Deleting pods instead of fixing deployments
+* Editing live resources causing config drift
+* Ignoring events during debugging
+* Forgetting namespace (`-n <namespace>`)
+* Not checking resource usage before scaling
+
+---
+
+# 🧠 Summary
+
+* `kubectl` is the primary CLI for Kubernetes operations
+* Used for deployment, debugging, scaling, and maintenance
+* Combine commands for effective troubleshooting
+* Always validate changes before applying in production
+
+---
+
+
+
+
+
+---
+
+# 📦 Helm
+
+## Overview
+
+Helm is a package manager for Kubernetes that helps manage applications using charts.
+
+---
+
+## Helm Folder Structure
+
+```
+mychart/
+├── Chart.yaml
+├── values.yaml
+├── values-dev.yaml
+├── values-prod.yaml
+├── charts/
+├── templates/
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   ├── ingress.yaml
+│   ├── hpa.yaml
+│   ├── configmap.yaml
+│   ├── secret.yaml
+│   ├── _helpers.tpl
+│   └── NOTES.txt
+├── templates/tests/
+└── .helmignore
+```
+
+---
+
+## Key Files
+
+### Chart.yaml
+
+Defines metadata.
+
+```yaml
+apiVersion: v2
+name: web-app
+version: 0.1.0
+```
+
+---
+
+### values.yaml
+
+Default configuration.
+
+```yaml
+replicaCount: 2
+image:
+  repository: myrepo/web-app
+  tag: latest
+```
+
+---
+
+### Templates
+
+Dynamic Kubernetes manifests.
+
+```yaml
+replicas: {{ .Values.replicaCount }}
+image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+```
+
+---
+
+### _helpers.tpl
+
+Reusable template logic.
+
+```yaml
+{{ define "app.name" }}web-app{{ end }}
+```
+
+---
+
+# Helm Commands – Practical DevOps Reference
+
+## 📌 Overview
+
+This document provides a production-ready reference for commonly used Helm commands. It is structured for direct usage in GitHub documentation without requiring further edits or formatting.
+
+---
+
+# 📦 Repository Management
+
+| Command                      | Description                 | Usage                               |
+| ---------------------------- | --------------------------- | ----------------------------------- |
+| `helm repo add <name> <url>` | Add a Helm chart repository | First step before installing charts |
+| `helm repo list`             | List added repositories     | Verify repo configuration           |
+| `helm repo update`           | Update repo index           | Always run before install/upgrade   |
+| `helm search repo <keyword>` | Search charts in repos      | Find available applications         |
+
+---
+
+# 🚀 Installation & Deployment
+
+| Command                                             | Description                    | Usage                 |
+| --------------------------------------------------- | ------------------------------ | --------------------- |
+| `helm install <release> <chart>`                    | Install a chart                | Deploy application    |
+| `helm install <release> <chart> -f values.yaml`     | Install with custom values     | 🔥 Real-world usage   |
+| `helm install <release> <chart> --set key=value`    | Override values inline         | Quick testing         |
+| `helm install <release> <chart> --namespace <ns>`   | Install in specific namespace  | Environment isolation |
+| `helm install <release> <chart> --create-namespace` | Create namespace if not exists | First-time setup      |
+
+---
+
+# 🔄 Upgrades & Rollbacks
+
+| Command                                         | Description                  | Usage                     |
+| ----------------------------------------------- | ---------------------------- | ------------------------- |
+| `helm upgrade <release> <chart>`                | Upgrade a release            | Deploy new version        |
+| `helm upgrade <release> <chart> -f values.yaml` | Upgrade with config          | 🔥 Most common            |
+| `helm upgrade --install <release> <chart>`      | Install if not exists        | CI/CD pipelines           |
+| `helm rollback <release> <revision>`            | Rollback to previous version | 🔥 Production recovery    |
+| `helm history <release>`                        | Show release history         | Identify rollback version |
+
+---
+
+# 🔍 Debugging & Validation
+
+| Command                                            | Description         | Usage               |
+| -------------------------------------------------- | ------------------- | ------------------- |
+| `helm status <release>`                            | Show release status | Verify deployment   |
+| `helm get values <release>`                        | Show applied values | Debug config issues |
+| `helm get manifest <release>`                      | Show rendered YAML  | Inspect resources   |
+| `helm lint <chart>`                                | Validate chart      | Catch errors early  |
+| `helm template <chart>`                            | Render YAML locally | Debug before deploy |
+| `helm template <chart> -f values.yaml`             | Render with values  | Validate configs    |
+| `helm upgrade --dry-run --debug <release> <chart>` | Simulate deployment | 🔥 Safe testing     |
+
+---
+
+# 🧹 Cleanup & Removal
+
+| Command                                   | Description           | Usage              |
+| ----------------------------------------- | --------------------- | ------------------ |
+| `helm uninstall <release>`                | Remove release        | Delete application |
+| `helm uninstall <release> -n <namespace>` | Remove from namespace | Targeted cleanup   |
+
+---
+
+# 📊 Release Management
+
+| Command                    | Description             | Usage              |
+| -------------------------- | ----------------------- | ------------------ |
+| `helm list`                | List releases           | View deployed apps |
+| `helm list -A`             | List all namespaces     | Multi-env clusters |
+| `helm list -n <namespace>` | List specific namespace | Filter results     |
+
+---
+
+# 📦 Chart Development
+
+| Command                  | Description          | Usage             |
+| ------------------------ | -------------------- | ----------------- |
+| `helm create <name>`     | Create new chart     | Start new project |
+| `helm package <chart>`   | Package chart        | Share/distribute  |
+| `helm dependency update` | Install dependencies | Fetch subcharts   |
+| `helm dependency build`  | Rebuild dependencies | Recreate charts/  |
+
+---
+
+# 🧪 Testing
+
+| Command               | Description     | Usage               |
+| --------------------- | --------------- | ------------------- |
+| `helm test <release>` | Run chart tests | Validate deployment |
+
+---
+
+# 🚀 Real-World Workflows
+
+## Install Application
+
+```bash id="d3l9n2"
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
+helm install web-app bitnami/nginx
+```
+
+---
+
+## Install with Custom Values
+
+```bash id="pl4z88"
+helm install web-app ./chart -f values.yaml
+```
+
+---
+
+## Upgrade Deployment
+
+```bash id="x4j5pu"
+helm upgrade web-app ./chart -f values.yaml
+```
+
+---
+
+## Safe Deployment (Dry Run)
+
+```bash id="l1dx3y"
+helm upgrade web-app ./chart -f values.yaml --dry-run --debug
+```
+
+---
+
+## Rollback Deployment
+
+```bash id="s8q0az"
+helm rollback web-app 1
+```
+
+---
+
+## Debug Rendered YAML
+
+```bash id="j3k2wr"
+helm template web-app ./chart -f values.yaml
+```
+
+---
+
+# ⚠️ Common Mistakes
+
+* Editing Kubernetes resources directly instead of using Helm
+* Not using values files for environment separation
+* Skipping dry-run before production deployment
+* Large and unstructured values.yaml files
+* Not tracking chart versions properly
+
+---
+
+# 🧠 Best Practices
+
+* Use separate values files (`values-dev.yaml`, `values-prod.yaml`)
+* Always run `helm lint` before deployment
+* Use `--dry-run --debug` for safe deployments
+* Version your charts properly
+* Keep templates reusable and clean
+* Use dependencies instead of reinventing services
+
+---
+
+# 🧠 Summary
+
+* Helm simplifies Kubernetes deployments using charts
+* Supports versioning, rollback, and templating
+* Essential for managing production-grade applications
+* Integrates well with CI/CD pipelines
+
+---
+
+This document is ready to be directly added to a GitHub repository.
+
+
+---
+
+# 🔥 Best Practices
+
+* Use environment-specific values files
+* Avoid hardcoding values
+* Use readiness/liveness probes
+* Prefer soft anti-affinity
+* Always define resource requests/limits
+* Use Helm for consistency and versioning
+
+---
+
+# ⚠️ Common Mistakes
+
+* Pods stuck in Pending due to strict affinity
+* Editing live resources instead of Helm
+* No separation between environments
+* Missing resource limits
+* Improper labeling
+
+---
+
+# 🧠 Summary
+
+* Kubernetes manages workloads and scaling
+* Affinity controls scheduling
+* kubectl is used for operations
+* Helm standardizes deployments
+
+---
+
+This document is production-ready and can be directly added to a GitHub repository.
